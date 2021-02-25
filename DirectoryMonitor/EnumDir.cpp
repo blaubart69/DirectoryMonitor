@@ -38,7 +38,10 @@ LastError* EnumDirRecurse(std::wstring* dir, WIN32_FIND_DATA* findData, const st
 
 			if ( (findData->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0 )
 			{
-				EnumDirRecurse(dir, findData, onFileEntry, err);
+				if ((findData->dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0)
+				{
+					EnumDirRecurse(dir, findData, onFileEntry, err);
+				}
 			}
 			else
 			{

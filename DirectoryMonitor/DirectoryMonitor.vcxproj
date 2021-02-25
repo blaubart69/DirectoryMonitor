@@ -186,6 +186,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">pch.h</PrecompiledHeaderFile>
     </ClCompile>
+    <ClCompile Include="TrySetPrivilege.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectoryMonitor.h" />

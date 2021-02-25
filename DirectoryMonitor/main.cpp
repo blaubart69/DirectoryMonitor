@@ -332,6 +332,11 @@ int wmain(int argc, wchar_t *argv[])
 		return 999;
 	}
 
+	if (!TryToSetPrivilege(SE_BACKUP_NAME, TRUE))
+	{
+		wprintf(L"could not set privilege SE_BACKUP_NAME\n");
+	}
+
 	LPCWSTR dirToMonitor = argv[1];
 	LPVOID bufChanges = NULL;
 	const DWORD bufChangesSize = 64 * 1024;

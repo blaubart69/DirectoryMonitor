@@ -27,6 +27,9 @@
     <ClCompile Include="EnumDir.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TrySetPrivilege.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="LastError.h">
