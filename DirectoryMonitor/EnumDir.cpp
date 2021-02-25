@@ -24,7 +24,7 @@ LastError* EnumDirRecurse(std::wstring* dir, WIN32_FIND_DATA* findData, const st
 
 	if (hSearch == INVALID_HANDLE_VALUE)
 	{
-		err->set(L"FindFirstFileW");
+		err->set(L"FindFirstFileW", *dir);
 		return err;
 	}
 

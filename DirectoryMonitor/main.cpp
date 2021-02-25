@@ -202,6 +202,22 @@ LastError* runEnumeration_hashTable(RefreshCtx* ctx, LastError* err)
 	return err;
 }
 
+DWORD WINAPI RefreshThread(LPVOID lpThreadParameter)
+{
+	RefreshCtx* refreshCtx = (RefreshCtx*)lpThreadParameter;
+
+	LastError refreshErr;
+	if (runEnumeration_hashTable(refreshCtx, &refreshErr)->failed())
+	{
+		refreshErr.print();
+	}
+
+	refreshCtx->refreshRunning = false;
+	printf("refresh (enumerating files) ended\n");
+
+	return 0;
+}
+
 LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE hEventReadChanges, const LPVOID bufChanges, const DWORD bufChangesSize, LastError* err)
 {
 	Stats stats;
@@ -282,18 +298,17 @@ LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE 
 						{
 							printf("refresh (enumerating files) started\n");
 							refreshCtx->refreshRunning = true;
-							LastError refreshErr;
-							std::thread enumThread([&refreshCtx, &stats, &refreshErr]()
+							DWORD threadId;
+							HANDLE hThread;
+							if ((hThread = CreateThread(NULL, 0, RefreshThread, refreshCtx, 0, &threadId)) == NULL)
 							{
-								if (runEnumeration_hashTable(refreshCtx, &refreshErr)->failed())
-								{
-									refreshErr.print();
-								}
-								refreshCtx->refreshRunning = false;
-								printf("refresh (enumerating files) ended\n");
-								printStats(stats, refreshCtx->getFileCount());
-							});
-							enumThread.detach();
+								LastError(L"CreateThread").print();
+							}
+							else
+							{
+								refreshCtx->refreshRunning = false;;
+								CloseHandle(hThread);
+							}
 						}
 					}
 					else if (key == 'p')
@@ -317,7 +332,6 @@ int wmain(int argc, wchar_t *argv[])
 		return 999;
 	}
 
-	LPCWSTR errFunc = NULL;
 	LPCWSTR dirToMonitor = argv[1];
 	LPVOID bufChanges = NULL;
 	const DWORD bufChangesSize = 64 * 1024;
