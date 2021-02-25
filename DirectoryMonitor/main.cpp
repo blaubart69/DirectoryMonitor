@@ -55,10 +55,10 @@ void printChanges(LPVOID buf, DWORD bytesReturned, std::wstring* str)
 
 	wprintf(L"%s", str->c_str());
 }
-void printStats(const Stats& stats)
+void printStats(const Stats& stats, size_t fileCount)
 {
 	wprintf(L"files: %zu | added/removed/modified/renamed: %zu/%zu/%zu/%zu | max files/bytes: %zu/%s | notify records/bytes: %zu/%s\n"
-		, stats.getFileCount()
+		, fileCount
 		, stats.added
 		, stats.removed
 		, stats.modified
@@ -113,8 +113,8 @@ void processChanges(RefreshCtx* ctx, LPVOID buf, DWORD bytesReturned, Stats *sta
 			changes_updateStats(info->Action, stats);
 			if (set_of_files == nullptr)
 			{
-				     if (info->Action == FILE_ACTION_ADDED)   { stats->numberFilesIncrement(); }
-				else if (info->Action == FILE_ACTION_REMOVED) { stats->numberFilesDecrement(); }
+				     if (info->Action == FILE_ACTION_ADDED)   { ctx->numberFilesIncrement(); }
+				else if (info->Action == FILE_ACTION_REMOVED) { ctx->numberFilesDecrement(); }
 			}
 			else
 			{
@@ -158,14 +158,14 @@ bool ProcessConsoleInput(HANDLE hStdin, char* key)
 	return false;
 } 
 
-LastError* runEnumeration_hashTable(RefreshCtx* ctx, Stats* stats, LastError* err)
+LastError* runEnumeration_hashTable(RefreshCtx* ctx, LastError* err)
 {
 	WIN32_FIND_DATA findData;
 	std::wstring dir(ctx->rootDir);
 
 	size_t dirStartIdx = ctx->rootDir.ends_with(L'\\') ? ctx->rootDir.length() : ctx->rootDir.length() + 1;
 
-	stats->setFileCount(0);
+	ctx->setFileCount(0);
 
 	std::unordered_set<std::wstring> set_of_files;
 	{
@@ -174,9 +174,9 @@ LastError* runEnumeration_hashTable(RefreshCtx* ctx, Stats* stats, LastError* er
 	}
 
 	err = EnumDirRecurse(&dir, &findData,
-		[&ctx, &stats, dirStartIdx, &set_of_files](const std::wstring& fullEntryname, WIN32_FIND_DATA* findData)
+		[&ctx, dirStartIdx, &set_of_files](const std::wstring& fullEntryname, WIN32_FIND_DATA* findData)
 		{
-			stats->numberFilesIncrement();
+			ctx->numberFilesIncrement();
 
 			{
 				const std::lock_guard<std::mutex> lock_hashtable(ctx->mutex_notify_vs_enum);
@@ -197,7 +197,7 @@ LastError* runEnumeration_hashTable(RefreshCtx* ctx, Stats* stats, LastError* er
 		ctx->files.store(nullptr);
 	}
 
-	stats->setFileCount(set_of_files.size());
+	ctx->setFileCount(set_of_files.size());
 
 	return err;
 }
@@ -231,6 +231,7 @@ LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE 
 	}
 	else
 	{
+		std::wstring tmpStr;
 		for (;;)
 		{
 			DWORD wait = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
@@ -249,7 +250,11 @@ LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE 
 				{
 					stats.overall_notify_bytes += bytesReturned;
 					processChanges(refreshCtx, bufChanges, bytesReturned, &stats);
-					printStats(stats);
+					if (refreshCtx->printChangedFiles)
+					{
+						printChanges(bufChanges, bytesReturned, &tmpStr);
+					}
+					printStats(stats, refreshCtx->getFileCount() );
 
 					if (ReadDirectoryChangesW(
 						hDir
@@ -280,17 +285,23 @@ LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE 
 							LastError refreshErr;
 							std::thread enumThread([&refreshCtx, &stats, &refreshErr]()
 							{
-								if (runEnumeration_hashTable(refreshCtx, &stats, &refreshErr)->failed())
+								if (runEnumeration_hashTable(refreshCtx, &refreshErr)->failed())
 								{
 									refreshErr.print();
 								}
 								refreshCtx->refreshRunning = false;
 								printf("refresh (enumerating files) ended\n");
-								printStats(stats);
+								printStats(stats, refreshCtx->getFileCount());
 							});
 							enumThread.detach();
 						}
 					}
+					else if (key == 'p')
+					{
+						refreshCtx->printChangedFiles = !refreshCtx->printChangedFiles;
+						printf("printing changed files is now %s\n", refreshCtx->printChangedFiles ? "ON" : "OFF");
+					}
+
 				}
 			}
 		}
