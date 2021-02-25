@@ -5,19 +5,30 @@ class RefreshCtx
 private:
 
 	std::atomic<size_t>	_fileCounter{ 0 };
+	HANDLE _hEventRefreshFinished;
 
 public:
 	const std::wstring rootDir;
+	
 	std::mutex mutex_notify_vs_enum;
 	std::atomic<bool> refreshRunning;
 	std::atomic<std::unordered_set<std::wstring>*> files;
 
 	bool printChangedFiles = false;
 
-	RefreshCtx(LPCWSTR dir) : rootDir(dir)
+	RefreshCtx(LPCWSTR dir, HANDLE hEventRefreshFinished) : rootDir(dir)
 	{
 		refreshRunning = false;
 		files = nullptr;
+		_hEventRefreshFinished = hEventRefreshFinished;
+	}
+
+	void SetFinishedEvent()
+	{
+		if (_hEventRefreshFinished != NULL)
+		{
+			SetEvent(_hEventRefreshFinished);
+		}
 	}
 
 	void    setFileCount(size_t value) { _fileCounter.store(value); }

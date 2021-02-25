@@ -213,12 +213,12 @@ DWORD WINAPI RefreshThread(LPVOID lpThreadParameter)
 	}
 
 	refreshCtx->refreshRunning = false;
-	printf("refresh (enumerating files) ended\n");
-
+	refreshCtx->SetFinishedEvent();
+	
 	return 0;
 }
 
-LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE hEventReadChanges, const LPVOID bufChanges, const DWORD bufChangesSize, LastError* err)
+LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE hEventReadChanges, const HANDLE hEventRefreshFinished, const LPVOID bufChanges, const DWORD bufChangesSize, LastError* err)
 {
 	Stats stats;
 	HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
@@ -226,11 +226,13 @@ LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE 
 
 	OVERLAPPED ovlReadDirectoryChanges = { 0 };
 	ovlReadDirectoryChanges.hEvent = hEventReadChanges;
-	HANDLE waitHandles[2];
+	HANDLE waitHandles[3];
 	const DWORD WAIT_IDX_ReadChanges = 0;
 	const DWORD WAIT_IDX_stdin = 1;
+	const DWORD WAIT_IDX_refreshFinished = 2;
 	waitHandles[WAIT_IDX_ReadChanges] = hEventReadChanges;
 	waitHandles[WAIT_IDX_stdin] = hStdin;
+	waitHandles[WAIT_IDX_refreshFinished] = hEventRefreshFinished;
 
 	DWORD bytesReturned;
 	if (ReadDirectoryChangesW(
@@ -250,7 +252,7 @@ LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE 
 		std::wstring tmpStr;
 		for (;;)
 		{
-			DWORD wait = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
+			DWORD wait = WaitForMultipleObjects(3, waitHandles, FALSE, INFINITE);
 			if (wait == WAIT_FAILED)
 			{
 				err->set(L"WaitForMultipleObjects");
@@ -319,6 +321,11 @@ LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE 
 
 				}
 			}
+			else if (wait == WAIT_IDX_refreshFinished)
+			{
+				printf("refresh (enumerating files) ended\n");
+				printStats(stats, refreshCtx->getFileCount());
+			}
 		}
 	}
 	return err;
@@ -342,6 +349,7 @@ int wmain(int argc, wchar_t *argv[])
 	const DWORD bufChangesSize = 64 * 1024;
 	HANDLE hDir = NULL;
 	HANDLE hEventReadChanges = NULL;
+	HANDLE hRefreshFinished = NULL;
 	LastError err;
 
 	if ((bufChanges = HeapAlloc(GetProcessHeap(), 0, bufChangesSize)) == NULL)
@@ -359,15 +367,19 @@ int wmain(int argc, wchar_t *argv[])
 	{
 		err.set(L"CreateFileW");
 	}
-	else if ((hEventReadChanges = CreateEventW(NULL, FALSE, FALSE, NULL)) == INVALID_HANDLE_VALUE)
+	else if ((hEventReadChanges = CreateEventW(NULL, FALSE, FALSE, NULL)) == NULL)
 	{
-		err.set(L"CreateEventW");
+		err.set(L"CreateEventW", L"hEventReadChanges");
+	}
+	else if ((hRefreshFinished = CreateEventW(NULL, FALSE, FALSE, NULL)) == NULL)
+	{
+		err.set(L"CreateEventW", L"hRefreshFinished");
 	}
 	else
 	{
-		RefreshCtx ctx(dirToMonitor);
+		RefreshCtx ctx(dirToMonitor, hRefreshFinished);
 		wprintf(L"start monitor for directory: %s\n", dirToMonitor);
-		StartMonitor(&ctx, hDir, hEventReadChanges, bufChanges, bufChangesSize, &err);
+		StartMonitor(&ctx, hDir, hEventReadChanges, hRefreshFinished, bufChanges, bufChangesSize, &err);
 	}
 
 	CloseHandle_mayBeNullOrInvalid(hEventReadChanges);
