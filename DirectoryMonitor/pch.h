@@ -10,6 +10,7 @@
 #include <mutex>
 #include <unordered_set>
 #include <functional>
+#include <atomic>
 
 #include "LastError.h"
 #include "util.h"

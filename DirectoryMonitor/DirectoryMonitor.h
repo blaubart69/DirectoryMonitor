@@ -17,6 +17,10 @@ public:
 
 class Stats
 {
+private:
+
+	std::atomic<size_t>	_fileCounter{ 0 };
+
 public:
 	size_t	changes = 0;
 
@@ -29,6 +33,31 @@ public:
 	size_t  largest_change_files = 0;
 	size_t  overall_notify_bytes = 0;
 
-	std::atomic<size_t>	numberFiles{ 0 };
+	void    setFileCount(size_t value) { _fileCounter.store(value); }
+	size_t	getFileCount() const { return _fileCounter.load();  }
+	void numberFilesIncrement() { _fileCounter++; }
+	void numberFilesDecrement() 
+	{
+		size_t value = _fileCounter.load();
+		if (value == 0)
+		{
+			return;
+		}
+
+		for (;;)
+		{
+			size_t newValue = value - 1;
+			if (_fileCounter.compare_exchange_strong(
+				value		    // expected
+				, newValue))	// desired
+			{
+				break;
+			}
+			else
+			{
+				value = _fileCounter.load();
+			}
+		}
+	}
 };
 

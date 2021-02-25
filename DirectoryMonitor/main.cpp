@@ -58,7 +58,7 @@ void printChanges(LPVOID buf, DWORD bytesReturned, std::wstring* str)
 void printStats(const Stats& stats)
 {
 	wprintf(L"files: %zu | added/removed/modified/renamed: %zu/%zu/%zu/%zu | max files/bytes: %zu/%s | notify records/bytes: %zu/%s\n"
-		, stats.numberFiles.load()
+		, stats.getFileCount()
 		, stats.added
 		, stats.removed
 		, stats.modified
@@ -82,11 +82,19 @@ void handleRunningEnumeration(std::unordered_set<std::wstring>* files, const FIL
 	if (info->Action == FILE_ACTION_ADDED)
 	{
 		files->emplace(&(info->FileName[0]), info->FileNameLength);
+#ifdef _DEBUG
+		wprintf(L"notify, emplace file to hash: [%s]\n", std::wstring(&(info->FileName[0]), info->FileNameLength).c_str());
+#endif
+
 	}
 	else if (info->Action == FILE_ACTION_REMOVED)
 	{
 		std::wstring tmpFilename(&(info->FileName[0]), info->FileNameLength);
 		files->erase(tmpFilename);
+#ifdef _DEBUG
+		wprintf(L"notify, erase file from hash: [%s]\n", tmpFilename.c_str());
+#endif
+
 	}
 }
 
@@ -105,8 +113,8 @@ void processChanges(RefreshCtx* ctx, LPVOID buf, DWORD bytesReturned, Stats *sta
 			changes_updateStats(info->Action, stats);
 			if (set_of_files == nullptr)
 			{
-				if      (info->Action == FILE_ACTION_ADDED)   { stats->numberFiles++; }
-				else if (info->Action == FILE_ACTION_REMOVED) { stats->numberFiles--; }
+				     if (info->Action == FILE_ACTION_ADDED)   { stats->numberFilesIncrement(); }
+				else if (info->Action == FILE_ACTION_REMOVED) { stats->numberFilesDecrement(); }
 			}
 			else
 			{
@@ -150,14 +158,14 @@ bool ProcessConsoleInput(HANDLE hStdin, char* key)
 	return false;
 } 
 
-LastError* runEnumeration_hashTable(RefreshCtx* ctx, std::atomic<size_t>* numberFiles, LastError* err)
+LastError* runEnumeration_hashTable(RefreshCtx* ctx, Stats* stats, LastError* err)
 {
 	WIN32_FIND_DATA findData;
 	std::wstring dir(ctx->rootDir);
 
 	size_t dirStartIdx = ctx->rootDir.ends_with(L'\\') ? ctx->rootDir.length() : ctx->rootDir.length() + 1;
 
-	numberFiles->store(0);
+	stats->setFileCount(0);
 
 	std::unordered_set<std::wstring> set_of_files;
 	{
@@ -166,13 +174,19 @@ LastError* runEnumeration_hashTable(RefreshCtx* ctx, std::atomic<size_t>* number
 	}
 
 	err = EnumDirRecurse(&dir, &findData,
-		[&ctx, &numberFiles, dirStartIdx, &set_of_files](const std::wstring& fullEntryname, WIN32_FIND_DATA* findData)
+		[&ctx, &stats, dirStartIdx, &set_of_files](const std::wstring& fullEntryname, WIN32_FIND_DATA* findData)
 		{
-			(*numberFiles)++;
+			stats->numberFilesIncrement();
 
 			{
 				const std::lock_guard<std::mutex> lock_hashtable(ctx->mutex_notify_vs_enum);
 				set_of_files.emplace(fullEntryname.begin() + dirStartIdx, fullEntryname.end());
+/*
+#ifdef _DEBUG
+				wprintf(L"enum, add file to hash: [%s]\n", std::wstring(fullEntryname.begin() + dirStartIdx, fullEntryname.end()).c_str());
+#endif
+*/
+
 			}
 
 		}
@@ -183,7 +197,7 @@ LastError* runEnumeration_hashTable(RefreshCtx* ctx, std::atomic<size_t>* number
 		ctx->files.store(nullptr);
 	}
 
-	numberFiles->store(set_of_files.size());
+	stats->setFileCount(set_of_files.size());
 
 	return err;
 }
@@ -266,7 +280,7 @@ LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE 
 							LastError refreshErr;
 							std::thread enumThread([&refreshCtx, &stats, &refreshErr]()
 							{
-								if (runEnumeration_hashTable(refreshCtx, &(stats.numberFiles), &refreshErr)->failed())
+								if (runEnumeration_hashTable(refreshCtx, &stats, &refreshErr)->failed())
 								{
 									refreshErr.print();
 								}
