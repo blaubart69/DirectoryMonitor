@@ -25,11 +25,11 @@ void CloseHandle_mayBeNullOrInvalid(HANDLE h)
 }
 LPCWSTR getActionname(DWORD action)
 {
-	if (action == FILE_ACTION_ADDED)			return L"ADDED              ";
-	if (action == FILE_ACTION_REMOVED)			return L"REMOVED            ";
-	if (action == FILE_ACTION_MODIFIED)			return L"MODIFIED           ";
-	if (action == FILE_ACTION_RENAMED_OLD_NAME) return L"RENAMED_OLD_NAME   ";
-	if (action == FILE_ACTION_RENAMED_NEW_NAME) return L"RENAMED_NEW_NAME   ";
+	if (action == FILE_ACTION_ADDED)			return L"ADD      ";
+	if (action == FILE_ACTION_REMOVED)			return L"DEL      ";
+	if (action == FILE_ACTION_MODIFIED)			return L"MOD      ";
+	if (action == FILE_ACTION_RENAMED_OLD_NAME) return L"REN_OLD  ";
+	if (action == FILE_ACTION_RENAMED_NEW_NAME) return L"REN_NEW  ";
 	return L"UNKNOWN";
 }
 void printChanges(LPVOID buf, DWORD bytesReturned, std::wstring* str)
@@ -53,21 +53,22 @@ void printChanges(LPVOID buf, DWORD bytesReturned, std::wstring* str)
 		}
 	}
 
-	wprintf(L"%s", str->c_str());
+	wprintf(L"\n%s\n", str->c_str());
 }
 void printStats(const Stats& stats, size_t fileCount, bool refreshRunning)
 {
-	wprintf(L"files: %zu | added/removed/modified/renamed: %zu/%zu/%zu/%zu | max files/bytes: %zu/%s | notify records/bytes: %zu/%s%s\n"
+	wprintf(L"files%s: %zu | +/-/mod/ren: %zu/%zu/%zu/%zu | notify records/bytes: %zu/%s | max files/bytes: %zu/%s\n"
+		, refreshRunning ? L"(refresh running)" : L""
 		, fileCount
 		, stats.added
 		, stats.removed
 		, stats.modified
 		, stats.renamed
-		, stats.largest_change_files
-		, FormatByteSize(stats.largest_change_bytes).c_str()
-		, stats.changes
+		,                stats.changes
 		, FormatByteSize(stats.overall_notify_bytes).c_str()
-		, refreshRunning ? L" | refresh running" : L"");
+		,               stats.largest_change_files
+		, FormatByteSize(stats.largest_change_bytes).c_str()
+	);
 }
 
 void changes_updateStats(DWORD action, Stats* stats)
@@ -225,6 +226,23 @@ DWORD WINAPI RefreshThread(LPVOID lpThreadParameter)
 	return 0;
 }
 
+void StartRefresh(RefreshCtx* refreshCtx)
+{
+	if ( ! refreshCtx->refreshRunning() )
+	{
+		DWORD threadId;
+		HANDLE hThread;
+		if ((hThread = CreateThread(NULL, 0, RefreshThread, refreshCtx, 0, &threadId)) == NULL)
+		{
+			LastError(L"CreateThread").print();
+		}
+		else
+		{
+			CloseHandle(hThread);
+		}
+	}
+}
+
 LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hEventReadChanges, const HANDLE hRefreshFinished, const LPVOID bufChanges, const DWORD bufChangesSize, LastError* err)
 {
 	Stats stats;
@@ -259,6 +277,7 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 		wprintf(L"start monitoring directory: %s\n", dirToMonitor);
 		std::wstring tmpStr;
 		RefreshCtx refreshCtx(dirToMonitor, hRefreshFinished);
+		StartRefresh(&refreshCtx);
 		for (;;)
 		{
 			DWORD wait = WaitForMultipleObjects(3, waitHandles, FALSE, INFINITE);
@@ -306,19 +325,7 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 				{
 					if (key == 'r')
 					{
-						if ( ! refreshCtx.refreshRunning() )
-						{
-							DWORD threadId;
-							HANDLE hThread;
-							if ((hThread = CreateThread(NULL, 0, RefreshThread, &refreshCtx, 0, &threadId)) == NULL)
-							{
-								LastError(L"CreateThread").print();
-							}
-							else
-							{
-								CloseHandle(hThread);
-							}
-						}
+						StartRefresh(&refreshCtx);
 					}
 					else if (key == 'p')
 					{
