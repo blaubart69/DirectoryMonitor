@@ -11,16 +11,21 @@ public:
 	const std::wstring rootDir;
 	
 	std::mutex mutex_notify_vs_enum;
-	std::atomic<bool> refreshRunning;
+	//std::atomic<bool> refreshRunning;
 	std::atomic<std::unordered_set<std::wstring>*> files;
 
 	bool printChangedFiles = false;
 
 	RefreshCtx(LPCWSTR dir, HANDLE hEventRefreshFinished) : rootDir(dir)
 	{
-		refreshRunning = false;
+		//refreshRunning = false;
 		files = nullptr;
 		_hEventRefreshFinished = hEventRefreshFinished;
+	}
+
+	bool refreshRunning()
+	{
+		return files.load() != nullptr;
 	}
 
 	void SetFinishedEvent()

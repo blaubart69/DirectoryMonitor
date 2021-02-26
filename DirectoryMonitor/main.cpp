@@ -55,9 +55,9 @@ void printChanges(LPVOID buf, DWORD bytesReturned, std::wstring* str)
 
 	wprintf(L"%s", str->c_str());
 }
-void printStats(const Stats& stats, size_t fileCount)
+void printStats(const Stats& stats, size_t fileCount, bool refreshRunning)
 {
-	wprintf(L"files: %zu | added/removed/modified/renamed: %zu/%zu/%zu/%zu | max files/bytes: %zu/%s | notify records/bytes: %zu/%s\n"
+	wprintf(L"files: %zu | added/removed/modified/renamed: %zu/%zu/%zu/%zu | max files/bytes: %zu/%s | notify records/bytes: %zu/%s%s\n"
 		, fileCount
 		, stats.added
 		, stats.removed
@@ -66,7 +66,8 @@ void printStats(const Stats& stats, size_t fileCount)
 		, stats.largest_change_files
 		, FormatByteSize(stats.largest_change_bytes).c_str()
 		, stats.changes
-		, FormatByteSize(stats.overall_notify_bytes).c_str());
+		, FormatByteSize(stats.overall_notify_bytes).c_str()
+		, refreshRunning ? L" | refresh running" : L"");
 }
 
 void changes_updateStats(DWORD action, Stats* stats)
@@ -163,16 +164,25 @@ LastError* runEnumeration_hashTable(RefreshCtx* ctx, LastError* err)
 	WIN32_FIND_DATA findData;
 	std::wstring dir(ctx->rootDir);
 
-	size_t dirStartIdx = ctx->rootDir.ends_with(L'\\') ? ctx->rootDir.length() : ctx->rootDir.length() + 1;
-
-	ctx->setFileCount(0);
-
 	std::unordered_set<std::wstring> set_of_files;
 	{
 		const std::lock_guard<std::mutex> lock_hashtable(ctx->mutex_notify_vs_enum);
 		ctx->files.store(&set_of_files);
 	}
 
+	size_t dirStartIdx; 
+
+	if (dir.ends_with(L'\\'))
+	{
+		dir.resize(dir.size() - 1);
+		dirStartIdx = ctx->rootDir.length();
+	}
+	else
+	{
+		dirStartIdx = ctx->rootDir.length() + 1;
+	}
+
+	ctx->setFileCount(0);
 	err = EnumDirRecurse(&dir, &findData,
 		[&ctx, dirStartIdx, &set_of_files](const std::wstring& fullEntryname, WIN32_FIND_DATA* findData)
 		{
@@ -181,11 +191,9 @@ LastError* runEnumeration_hashTable(RefreshCtx* ctx, LastError* err)
 			{
 				const std::lock_guard<std::mutex> lock_hashtable(ctx->mutex_notify_vs_enum);
 				set_of_files.emplace(fullEntryname.begin() + dirStartIdx, fullEntryname.end());
-/*
 #ifdef _DEBUG
 				wprintf(L"enum, add file to hash: [%s]\n", std::wstring(fullEntryname.begin() + dirStartIdx, fullEntryname.end()).c_str());
 #endif
-*/
 
 			}
 
@@ -212,13 +220,12 @@ DWORD WINAPI RefreshThread(LPVOID lpThreadParameter)
 		refreshErr.print();
 	}
 
-	refreshCtx->refreshRunning = false;
 	refreshCtx->SetFinishedEvent();
 	
 	return 0;
 }
 
-LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE hEventReadChanges, const HANDLE hEventRefreshFinished, const LPVOID bufChanges, const DWORD bufChangesSize, LastError* err)
+LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hEventReadChanges, const HANDLE hRefreshFinished, const LPVOID bufChanges, const DWORD bufChangesSize, LastError* err)
 {
 	Stats stats;
 	HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
@@ -232,7 +239,7 @@ LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE 
 	const DWORD WAIT_IDX_refreshFinished = 2;
 	waitHandles[WAIT_IDX_ReadChanges] = hEventReadChanges;
 	waitHandles[WAIT_IDX_stdin] = hStdin;
-	waitHandles[WAIT_IDX_refreshFinished] = hEventRefreshFinished;
+	waitHandles[WAIT_IDX_refreshFinished] = hRefreshFinished;
 
 	DWORD bytesReturned;
 	if (ReadDirectoryChangesW(
@@ -249,7 +256,9 @@ LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE 
 	}
 	else
 	{
+		wprintf(L"start monitoring directory: %s\n", dirToMonitor);
 		std::wstring tmpStr;
+		RefreshCtx refreshCtx(dirToMonitor, hRefreshFinished);
 		for (;;)
 		{
 			DWORD wait = WaitForMultipleObjects(3, waitHandles, FALSE, INFINITE);
@@ -267,12 +276,13 @@ LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE 
 				else
 				{
 					stats.overall_notify_bytes += bytesReturned;
-					processChanges(refreshCtx, bufChanges, bytesReturned, &stats);
-					if (refreshCtx->printChangedFiles)
+					processChanges(&refreshCtx, bufChanges, bytesReturned, &stats);
+					if (refreshCtx.printChangedFiles)
 					{
 						printChanges(bufChanges, bytesReturned, &tmpStr);
 					}
-					printStats(stats, refreshCtx->getFileCount() );
+					
+					printStats(stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning());
 
 					if (ReadDirectoryChangesW(
 						hDir
@@ -296,35 +306,34 @@ LastError* StartMonitor(RefreshCtx* refreshCtx, const HANDLE hDir, const HANDLE 
 				{
 					if (key == 'r')
 					{
-						if ( ! refreshCtx->refreshRunning )
+						if ( ! refreshCtx.refreshRunning() )
 						{
-							printf("refresh (enumerating files) started\n");
-							refreshCtx->refreshRunning = true;
 							DWORD threadId;
 							HANDLE hThread;
-							if ((hThread = CreateThread(NULL, 0, RefreshThread, refreshCtx, 0, &threadId)) == NULL)
+							if ((hThread = CreateThread(NULL, 0, RefreshThread, &refreshCtx, 0, &threadId)) == NULL)
 							{
 								LastError(L"CreateThread").print();
 							}
 							else
 							{
-								refreshCtx->refreshRunning = false;;
 								CloseHandle(hThread);
 							}
 						}
 					}
 					else if (key == 'p')
 					{
-						refreshCtx->printChangedFiles = !refreshCtx->printChangedFiles;
-						printf("printing changed files is now %s\n", refreshCtx->printChangedFiles ? "ON" : "OFF");
+						refreshCtx.printChangedFiles = !refreshCtx.printChangedFiles;
+						printf("printing changed files is now %s\n", refreshCtx.printChangedFiles ? "ON" : "OFF");
 					}
-
+					else if (key == 's')
+					{
+						printStats(stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning());
+					}
 				}
 			}
 			else if (wait == WAIT_IDX_refreshFinished)
 			{
-				printf("refresh (enumerating files) ended\n");
-				printStats(stats, refreshCtx->getFileCount());
+				printStats(stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning());
 			}
 		}
 	}
@@ -341,7 +350,7 @@ int wmain(int argc, wchar_t *argv[])
 
 	if (!TryToSetPrivilege(SE_BACKUP_NAME, TRUE))
 	{
-		wprintf(L"could not set privilege SE_BACKUP_NAME\n");
+		fwprintf(stderr, L"W could not set privilege SE_BACKUP_NAME\n");
 	}
 
 	LPCWSTR dirToMonitor = argv[1];
@@ -365,7 +374,7 @@ int wmain(int argc, wchar_t *argv[])
 		, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED
 		, NULL)) == INVALID_HANDLE_VALUE)
 	{
-		err.set(L"CreateFileW");
+		err.set(L"CreateFileW", dirToMonitor);
 	}
 	else if ((hEventReadChanges = CreateEventW(NULL, FALSE, FALSE, NULL)) == NULL)
 	{
@@ -377,12 +386,11 @@ int wmain(int argc, wchar_t *argv[])
 	}
 	else
 	{
-		RefreshCtx ctx(dirToMonitor, hRefreshFinished);
-		wprintf(L"start monitor for directory: %s\n", dirToMonitor);
-		StartMonitor(&ctx, hDir, hEventReadChanges, hRefreshFinished, bufChanges, bufChangesSize, &err);
+		StartMonitor(dirToMonitor, hDir, hEventReadChanges, hRefreshFinished, bufChanges, bufChangesSize, &err);
 	}
 
 	CloseHandle_mayBeNullOrInvalid(hEventReadChanges);
+	CloseHandle_mayBeNullOrInvalid(hRefreshFinished);
 	CloseHandle_mayBeNullOrInvalid(hDir);
 	if (bufChanges != NULL) { HeapFree(GetProcessHeap(), 0, bufChanges); }
 

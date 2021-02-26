@@ -20,14 +20,16 @@ LastError* EnumDirRecurse(std::wstring* dir, WIN32_FIND_DATA* findData, const st
 
 	dir->append(L"\\*");
 	hSearch = FindFirstFileW(dir->c_str(), findData);
-	dir->resize(dir->size() - 2);
 
 	if (hSearch == INVALID_HANDLE_VALUE)
 	{
 		err->set(L"FindFirstFileW", *dir);
+		err->print();
+		dir->resize(dir->size() - 2);
 		return err;
 	}
 
+	dir->resize(dir->size() - 2);
 	do
 	{
 		if (!IsDotDir(findData->cFileName, findData->dwFileAttributes))
