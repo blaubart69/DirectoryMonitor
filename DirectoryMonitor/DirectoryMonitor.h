@@ -50,7 +50,7 @@ public:
 		for (;;)
 		{
 			size_t newValue = value - 1;
-			if (_fileCounter.compare_exchange_strong(
+			if (_fileCounter.compare_exchange_weak(
 				value		    // expected
 				, newValue))	// desired
 			{
