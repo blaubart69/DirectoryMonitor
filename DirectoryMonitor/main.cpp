@@ -41,6 +41,7 @@ void printChanges(LPVOID buf, DWORD bytesReturned, std::wstring* str)
 	{
 		str->append(getActionname(info->Action));
 		str->append(info->FileName, info->FileNameLength / sizeof(WCHAR) );
+		str->push_back(L'\r');
 		str->push_back(L'\n');
 
 		if (info->NextEntryOffset == 0)
@@ -53,22 +54,47 @@ void printChanges(LPVOID buf, DWORD bytesReturned, std::wstring* str)
 		}
 	}
 
-	wprintf(L"\n%s\n", str->c_str());
+	//wprintf(L"\n%s\n", str->c_str());
+	WriteStdout(*str);
 }
-void printStats(const Stats& stats, size_t fileCount, bool refreshRunning)
+void printStats(bool shouldPrint, const Stats& stats, size_t fileCount, bool refreshRunning, size_t everyMilliseconds)
 {
-	wprintf(L"files%s: %zu | +/-/mod/ren: %zu/%zu/%zu/%zu | notify records/bytes: %zu/%s | max files/bytes: %zu/%s\n"
+	if (!shouldPrint)
+	{
+		return;
+	}
+
+	static size_t last_added	= 0;
+	static size_t last_removed	= 0;
+	static size_t last_modified	= 0;
+	static size_t last_renamed  = 0;
+
+	static size_t last_ticks = 0;
+
+	ULONGLONG currentTicks = GetTickCount64();
+	if ((currentTicks - last_ticks) < everyMilliseconds)
+	{
+		return;
+	}
+
+	wprintf(L"files%s: %zu | +/-/mod/ren: %zu(%zu)/%zu(%zu)/%zu(%zu)/%zu(%zu) | notify records/bytes: %zu/%s | max files/bytes: %zu/%s\n"
 		, refreshRunning ? L"(refresh running)" : L""
 		, fileCount
-		, stats.added
-		, stats.removed
-		, stats.modified
-		, stats.renamed
+		, stats.added,		(stats.added    - last_added)
+		, stats.removed,    (stats.removed  - last_removed)
+		, stats.modified,	(stats.modified - last_modified)
+		, stats.renamed,	(stats.renamed  - last_renamed)
 		,                stats.changes
 		, FormatByteSize(stats.overall_notify_bytes).c_str()
 		,               stats.largest_change_files
 		, FormatByteSize(stats.largest_change_bytes).c_str()
 	);
+
+	last_added    = stats.added;
+	last_removed  = stats.removed;
+	last_modified = stats.modified;
+	last_renamed  = stats.renamed;
+	last_ticks    = currentTicks;
 }
 
 void changes_updateStats(DWORD action, Stats* stats)
@@ -243,7 +269,7 @@ void StartRefresh(RefreshCtx* refreshCtx)
 	}
 }
 
-LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hEventReadChanges, const HANDLE hRefreshFinished, const LPVOID bufChanges, const DWORD bufChangesSize, LastError* err)
+LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hEventReadChanges, const HANDLE hRefreshFinished, const LPVOID bufChanges, const DWORD bufChangesSize, const Options& opts, LastError* err)
 {
 	Stats stats;
 	HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
@@ -277,7 +303,6 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 		wprintf(L"start monitoring directory: %s\n", dirToMonitor);
 		std::wstring tmpStr;
 		RefreshCtx refreshCtx(dirToMonitor, hRefreshFinished);
-		StartRefresh(&refreshCtx);
 		for (;;)
 		{
 			DWORD wait = WaitForMultipleObjects(3, waitHandles, FALSE, INFINITE);
@@ -301,7 +326,7 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 						printChanges(bufChanges, bytesReturned, &tmpStr);
 					}
 					
-					printStats(stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning());
+					printStats(refreshCtx.printStats, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
 
 					if (ReadDirectoryChangesW(
 						hDir
@@ -327,20 +352,25 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 					{
 						StartRefresh(&refreshCtx);
 					}
-					else if (key == 'p')
+					else if (key == 'f')
 					{
 						refreshCtx.printChangedFiles = !refreshCtx.printChangedFiles;
 						printf("printing changed files is now %s\n", refreshCtx.printChangedFiles ? "ON" : "OFF");
 					}
 					else if (key == 's')
 					{
-						printStats(stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning());
+						refreshCtx.printStats = !refreshCtx.printStats;
+						printf("printing statistics is now %s\n", refreshCtx.printStats ? "ON" : "OFF");
+					}
+					else if (key == 'S')
+					{
+						printStats(true, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
 					}
 				}
 			}
 			else if (wait == WAIT_IDX_refreshFinished)
 			{
-				printStats(stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning());
+				printStats(refreshCtx.printStats, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
 			}
 		}
 	}
@@ -367,6 +397,7 @@ int wmain(int argc, wchar_t *argv[])
 	HANDLE hEventReadChanges = NULL;
 	HANDLE hRefreshFinished = NULL;
 	LastError err;
+	Options opts;
 
 	if ((bufChanges = HeapAlloc(GetProcessHeap(), 0, bufChangesSize)) == NULL)
 	{
@@ -393,7 +424,7 @@ int wmain(int argc, wchar_t *argv[])
 	}
 	else
 	{
-		StartMonitor(dirToMonitor, hDir, hEventReadChanges, hRefreshFinished, bufChanges, bufChangesSize, &err);
+		StartMonitor(dirToMonitor, hDir, hEventReadChanges, hRefreshFinished, bufChanges, bufChangesSize, opts, &err);
 	}
 
 	CloseHandle_mayBeNullOrInvalid(hEventReadChanges);

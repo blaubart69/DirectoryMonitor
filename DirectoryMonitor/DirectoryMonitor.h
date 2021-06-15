@@ -11,14 +11,13 @@ public:
 	const std::wstring rootDir;
 	
 	std::mutex mutex_notify_vs_enum;
-	//std::atomic<bool> refreshRunning;
 	std::atomic<std::unordered_set<std::wstring>*> files;
 
-	bool printChangedFiles = false;
+	bool printChangedFiles = true;
+	bool printStats = false;
 
 	RefreshCtx(LPCWSTR dir, HANDLE hEventRefreshFinished) : rootDir(dir)
 	{
-		//refreshRunning = false;
 		files = nullptr;
 		_hEventRefreshFinished = hEventRefreshFinished;
 	}
@@ -66,8 +65,6 @@ public:
 
 class Stats
 {
-
-
 public:
 	size_t	changes = 0;
 
@@ -79,7 +76,11 @@ public:
 	size_t  largest_change_bytes = 0;
 	size_t  largest_change_files = 0;
 	size_t  overall_notify_bytes = 0;
+};
 
-	
+class Options
+{
+public:
+	size_t	printStatsEveryMillis = 1000;
 };
 

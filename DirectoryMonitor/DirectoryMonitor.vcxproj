@@ -193,12 +193,14 @@
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">pch.h</PrecompiledHeaderFile>
     </ClCompile>
     <ClCompile Include="TrySetPrivilege.cpp" />
+    <ClCompile Include="WriteStdout.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectoryMonitor.h" />
     <ClInclude Include="util.h" />
     <ClInclude Include="LastError.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="WriteStdout.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
