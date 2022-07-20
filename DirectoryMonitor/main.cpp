@@ -46,14 +46,14 @@ int localtime_as_str(WCHAR* buf, const size_t cchBuf)
 }
 LPCWSTR getActionname(DWORD action)
 {
-	if (action == FILE_ACTION_ADDED)			return L"ADD      ";
-	if (action == FILE_ACTION_REMOVED)			return L"DEL      ";
-	if (action == FILE_ACTION_MODIFIED)			return L"MOD      ";
-	if (action == FILE_ACTION_RENAMED_OLD_NAME) return L"REN_OLD  ";
-	if (action == FILE_ACTION_RENAMED_NEW_NAME) return L"REN_NEW  ";
-	                                            return L"UNKNOWN  ";
+	if (action == FILE_ACTION_ADDED)			return L"ADD    \t";
+	if (action == FILE_ACTION_REMOVED)			return L"DEL    \t";
+	if (action == FILE_ACTION_MODIFIED)			return L"MOD    \t";
+	if (action == FILE_ACTION_RENAMED_OLD_NAME) return L"REN_OLD\t";
+	if (action == FILE_ACTION_RENAMED_NEW_NAME) return L"REN_NEW\t";
+	                                            return L"UNKNOWN\t";
 }
-void printChanges(LPVOID buf, DWORD bytesReturned, std::wstring* str)
+void printChanges(LPVOID buf, DWORD bytesReturned, const std::wstring& root_dir, std::wstring* str)
 {
 	const FILE_NOTIFY_INFORMATION* info = (FILE_NOTIFY_INFORMATION*)buf;
 	WCHAR localtime_string[20];
@@ -63,8 +63,9 @@ void printChanges(LPVOID buf, DWORD bytesReturned, std::wstring* str)
 	for(;;)
 	{
 		str->append(localtime_string);
-		str->push_back(L' ');
+		str->push_back(L'\t');
 		str->append(getActionname(info->Action));
+		str->append(root_dir);
 		str->append(info->FileName, info->FileNameLength / sizeof(WCHAR) );
 		str->push_back(L'\r');
 		str->push_back(L'\n');
@@ -309,6 +310,12 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 	waitHandles[WAIT_IDX_stdin] = hStdin;
 	waitHandles[WAIT_IDX_refreshFinished] = hRefreshFinished;
 
+	std::wstring root_dir_for_print(dirToMonitor);
+	if (!root_dir_for_print.ends_with(L'\\'))
+	{
+		root_dir_for_print.push_back(L'\\');
+	}
+
 	DWORD bytesReturned;
 	if (ReadDirectoryChangesW(
 		hDir
@@ -347,7 +354,7 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 					processChanges(&refreshCtx, bufChanges, bytesReturned, &stats);
 					if (refreshCtx.printChangedFiles)
 					{
-						printChanges(bufChanges, bytesReturned, &tmpStr);
+						printChanges(bufChanges, bytesReturned, root_dir_for_print, &tmpStr);
 					}
 					
 					printStats(refreshCtx.printStats, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
