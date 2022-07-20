@@ -303,12 +303,12 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 	OVERLAPPED ovlReadDirectoryChanges = { 0 };
 	ovlReadDirectoryChanges.hEvent = hEventReadChanges;
 	HANDLE waitHandles[3];
-	const DWORD WAIT_IDX_ReadChanges = 0;
-	const DWORD WAIT_IDX_stdin = 1;
-	const DWORD WAIT_IDX_refreshFinished = 2;
-	waitHandles[WAIT_IDX_ReadChanges] = hEventReadChanges;
-	waitHandles[WAIT_IDX_stdin] = hStdin;
-	waitHandles[WAIT_IDX_refreshFinished] = hRefreshFinished;
+	const DWORD WAIT_IDX_ReadChanges		= 0;
+	const DWORD WAIT_IDX_stdin				= 1;
+	const DWORD WAIT_IDX_refreshFinished	= 2;
+	waitHandles[WAIT_IDX_ReadChanges]		= hEventReadChanges;
+	waitHandles[WAIT_IDX_stdin]				= hStdin;
+	waitHandles[WAIT_IDX_refreshFinished]	= hRefreshFinished;
 
 	std::wstring root_dir_for_print(dirToMonitor);
 	if (!root_dir_for_print.ends_with(L'\\'))
@@ -437,7 +437,7 @@ int wmain(int argc, wchar_t *argv[])
 	else if ( (hDir=CreateFileW(
 		dirToMonitor
 		, FILE_LIST_DIRECTORY
-		, FILE_SHARE_READ 
+		, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
 		, NULL
 		, OPEN_EXISTING
 		, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED
