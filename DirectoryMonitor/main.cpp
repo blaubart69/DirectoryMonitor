@@ -1,5 +1,10 @@
 #include "pch.h"
 
+#include "DirectoryMonitor.h"
+#include "WriteStdout.h"
+#include "LastError.h"
+#include "util.h"
+
 std::wstring FormatByteSize(size_t qdw)
 {
 	std::wstring buf;
@@ -30,7 +35,7 @@ LPCWSTR getActionname(DWORD action)
 	if (action == FILE_ACTION_MODIFIED)			return L"MOD      ";
 	if (action == FILE_ACTION_RENAMED_OLD_NAME) return L"REN_OLD  ";
 	if (action == FILE_ACTION_RENAMED_NEW_NAME) return L"REN_NEW  ";
-	return L"UNKNOWN";
+	                                            return L"UNKNOWN  ";
 }
 void printChanges(LPVOID buf, DWORD bytesReturned, std::wstring* str)
 {

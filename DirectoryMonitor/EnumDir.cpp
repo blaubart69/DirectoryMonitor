@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include "LastError.h"
+
 //------------------------------------------------------------
 BOOL IsDotDir(LPCWSTR cFileName, const DWORD dwFileAttributes) {
 //------------------------------------------------------------
