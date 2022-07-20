@@ -28,6 +28,22 @@ void CloseHandle_mayBeNullOrInvalid(HANDLE h)
 		CloseHandle(h);
 	}
 }
+
+int localtime_as_str(WCHAR* buf, const size_t cchBuf)
+{
+	SYSTEMTIME systemTime, localTime;
+
+	GetSystemTime(&systemTime);
+	GetLocalTime (&localTime);
+
+	return 
+		swprintf_s(
+			buf
+			, cchBuf
+			, L"%04u-%02u-%02u %02u:%02u:%02u"
+			, localTime.wYear, localTime.wMonth, localTime.wDay
+			, localTime.wHour, localTime.wMinute, localTime.wSecond);
+}
 LPCWSTR getActionname(DWORD action)
 {
 	if (action == FILE_ACTION_ADDED)			return L"ADD      ";
@@ -40,10 +56,14 @@ LPCWSTR getActionname(DWORD action)
 void printChanges(LPVOID buf, DWORD bytesReturned, std::wstring* str)
 {
 	const FILE_NOTIFY_INFORMATION* info = (FILE_NOTIFY_INFORMATION*)buf;
+	WCHAR localtime_string[20];
+	localtime_as_str(localtime_string, sizeof(localtime_string) / sizeof(WCHAR));
 
 	str->clear();
 	for(;;)
 	{
+		str->append(localtime_string);
+		str->push_back(L' ');
 		str->append(getActionname(info->Action));
 		str->append(info->FileName, info->FileNameLength / sizeof(WCHAR) );
 		str->push_back(L'\r');
@@ -59,7 +79,6 @@ void printChanges(LPVOID buf, DWORD bytesReturned, std::wstring* str)
 		}
 	}
 
-	//wprintf(L"\n%s\n", str->c_str());
 	WriteStdout(*str);
 }
 void printStats(bool shouldPrint, const Stats& stats, size_t fileCount, bool refreshRunning, size_t everyMilliseconds)
