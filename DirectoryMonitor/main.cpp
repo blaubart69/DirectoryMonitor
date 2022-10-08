@@ -1,10 +1,10 @@
 #include "pch.h"
 
 #include "DirectoryMonitor.h"
-#include "WriteStdout.h"
 #include "LastError.h"
 #include "util.h"
 
+void StartRefresh(RefreshCtx* refreshCtx);
 
 LPCWSTR getActionname(DWORD action)
 {
@@ -41,7 +41,6 @@ void printChanges(LPVOID buf, DWORD bytesReturned, const std::wstring& root_dir,
 			info = (FILE_NOTIFY_INFORMATION*)((BYTE*)info + info->NextEntryOffset);
 		}
 	}
-
 	//WriteStdout(*str);
 	//_putws(str->c_str());
 	wprintf(L"%s", str->c_str());
@@ -86,51 +85,6 @@ void printStats(bool shouldPrint, const Stats& stats, size_t fileCount, bool ref
 	last_ticks    = currentTicks;
 }
 
-void changes_updateStats(DWORD action, Stats* stats)
-{
-	     if (action == FILE_ACTION_ADDED)				{ stats->added    += 1;	}
-	else if (action == FILE_ACTION_REMOVED)				{ stats->removed  += 1;	}
-	else if (action == FILE_ACTION_MODIFIED)			{ stats->modified += 1; }
-	else if (action == FILE_ACTION_RENAMED_NEW_NAME)	{ stats->renamed  += 1;	}
-}
-
-/*
-void handleRunningEnumeration(std::unordered_set<std::wstring>* files, const FILE_NOTIFY_INFORMATION* info)
-{
-	if (info->Action == FILE_ACTION_ADDED)
-	{
-		files->emplace(&(info->FileName[0]), info->FileNameLength);
-#ifdef _DEBUG
-		wprintf(L"notify, emplace file to hash: [%s]\n", std::wstring(&(info->FileName[0]), info->FileNameLength).c_str());
-#endif
-
-	}
-	else if (info->Action == FILE_ACTION_REMOVED)
-	{
-		std::wstring tmpFilename(&(info->FileName[0]), info->FileNameLength);
-		files->erase(tmpFilename);
-#ifdef _DEBUG
-		wprintf(L"notify, erase file from hash: [%s]\n", tmpFilename.c_str());
-#endif
-
-	}
-}*/
-
-void handleRunningEnumeration(std::unordered_set<std::wstring>* files, DWORD action, std::wstring_view filename)
-{
-	if (action == FILE_ACTION_ADDED)
-	{
-		//files->emplace(&(info->FileName[0]), info->FileNameLength);
-		files->emplace(filename);
-	}
-	else if (action == FILE_ACTION_REMOVED)
-	{
-		std::wstring tmpFilename( filename.data(), filename.length() );
-		//files->erase(tmpFilename);
-		files->erase(tmpFilename);
-	}
-}
-
 void processChanges(RefreshCtx* ctx, LPVOID buf, DWORD bytesReturned, Stats *stats)
 {
 	const FILE_NOTIFY_INFORMATION* info = (FILE_NOTIFY_INFORMATION*)buf;
@@ -144,7 +98,11 @@ void processChanges(RefreshCtx* ctx, LPVOID buf, DWORD bytesReturned, Stats *sta
 			[&](DWORD action, std::wstring_view filename)
 			{
 				changes += 1;
-				changes_updateStats(action, stats);
+				if      (action == FILE_ACTION_ADDED)            { stats->added    += 1; }
+				else if (action == FILE_ACTION_REMOVED)          { stats->removed  += 1; }
+				else if (action == FILE_ACTION_MODIFIED)         { stats->modified += 1; }
+				else if (action == FILE_ACTION_RENAMED_NEW_NAME) { stats->renamed  += 1; }
+
 				if (set_of_files == nullptr)
 				{
 					if      (action == FILE_ACTION_ADDED)   { ctx->numberFilesIncrement(); }
@@ -152,127 +110,25 @@ void processChanges(RefreshCtx* ctx, LPVOID buf, DWORD bytesReturned, Stats *sta
 				}
 				else
 				{
-					handleRunningEnumeration(set_of_files, action, filename);
+					if (action == FILE_ACTION_ADDED)
+					{
+						set_of_files->emplace(filename);
+					}
+					else if (action == FILE_ACTION_REMOVED)
+					{
+						std::wstring tmpFilename(filename.data(), filename.length());
+						set_of_files->erase(tmpFilename);
+					}
 				}
 			});
-
-		/*
-		for (;;)
-		{
-			changes += 1;
-			changes_updateStats(info->Action, stats);
-			if (set_of_files == nullptr)
-			{
-				     if (info->Action == FILE_ACTION_ADDED)   { ctx->numberFilesIncrement(); }
-				else if (info->Action == FILE_ACTION_REMOVED) { ctx->numberFilesDecrement(); }
-			}
-			else
-			{
-				handleRunningEnumeration(set_of_files, info);
-			}
-
-			if (info->NextEntryOffset == 0)
-			{
-				break;
-			}
-			else
-			{
-				info = (FILE_NOTIFY_INFORMATION*)((BYTE*)info + info->NextEntryOffset);
-			}
-		}
-		*/
 	}
 	stats->changes += 1;
 	stats->largest_change_files = std::max<size_t>(changes, stats->largest_change_files);
 	stats->largest_change_bytes = std::max<size_t>((size_t)bytesReturned, stats->largest_change_bytes);
 }
 
-LastError* runEnumeration_hashTable(RefreshCtx* ctx, LastError* err)
-{
-	WIN32_FIND_DATA findData;
-	std::wstring dir(ctx->rootDir);
-
-	std::unordered_set<std::wstring> set_of_files;
-	{
-		const std::lock_guard<std::mutex> lock_hashtable(ctx->mutex_notify_vs_enum);
-		ctx->files.store(&set_of_files);
-	}
-
-	size_t dirStartIdx; 
-
-	if (dir.ends_with(L'\\'))
-	{
-		dir.resize(dir.size() - 1);
-		dirStartIdx = ctx->rootDir.length();
-	}
-	else
-	{
-		dirStartIdx = ctx->rootDir.length() + 1;
-	}
-
-	ctx->setFileCount(0);
-	err = EnumDirRecurse(&dir, &findData,
-		[&ctx, dirStartIdx, &set_of_files](const std::wstring& fullEntryname, WIN32_FIND_DATA* findData)
-		{
-			ctx->numberFilesIncrement();
-
-			{
-				const std::lock_guard<std::mutex> lock_hashtable(ctx->mutex_notify_vs_enum);
-				set_of_files.emplace(fullEntryname.begin() + dirStartIdx, fullEntryname.end());
-#ifdef _DEBUG
-				wprintf(L"enum, add file to hash: [%s]\n", std::wstring(fullEntryname.begin() + dirStartIdx, fullEntryname.end()).c_str());
-#endif
-
-			}
-
-		}
-		, err);
-
-	{
-		const std::lock_guard<std::mutex> lock_hashtable(ctx->mutex_notify_vs_enum);
-		ctx->files.store(nullptr);
-	}
-
-	ctx->setFileCount(set_of_files.size());
-
-	return err;
-}
-
-DWORD WINAPI RefreshThread(LPVOID lpThreadParameter)
-{
-	RefreshCtx* refreshCtx = (RefreshCtx*)lpThreadParameter;
-
-	LastError refreshErr;
-	if (runEnumeration_hashTable(refreshCtx, &refreshErr)->failed())
-	{
-		refreshErr.print();
-	}
-
-	refreshCtx->SetFinishedEvent();
-	
-	return 0;
-}
-
-void StartRefresh(RefreshCtx* refreshCtx)
-{
-	if ( ! refreshCtx->refreshRunning() )
-	{
-		DWORD threadId;
-		HANDLE hThread;
-		if ((hThread = CreateThread(NULL, 0, RefreshThread, refreshCtx, 0, &threadId)) == NULL)
-		{
-			LastError(L"CreateThread").print();
-		}
-		else
-		{
-			CloseHandle(hThread);
-		}
-	}
-}
-
 LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hEventReadChanges, const HANDLE hRefreshFinished, const LPVOID bufChanges, const DWORD bufChangesSize, const Options& opts, LastError* err)
 {
-	Stats stats;
 	HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
 	SetConsoleMode(hStdin, ENABLE_PROCESSED_INPUT);
 
@@ -308,6 +164,7 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 	else
 	{
 		std::wstring tmpStr;
+		Stats stats;
 		RefreshCtx refreshCtx(dirToMonitor, hRefreshFinished);
 		for (;;)
 		{
@@ -327,6 +184,7 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 				{
 					stats.overall_notify_bytes += bytesReturned;
 					processChanges(&refreshCtx, bufChanges, bytesReturned, &stats);
+
 					if (refreshCtx.printChangedFiles)
 					{
 						printChanges(bufChanges, bytesReturned, root_dir_for_print, &tmpStr);
