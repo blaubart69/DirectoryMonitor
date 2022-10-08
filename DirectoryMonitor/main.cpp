@@ -140,93 +140,85 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 	}
 
 	DWORD bytesReturned;
-	if (ReadDirectoryChangesW(
-		hDir
-		, bufChanges
-		, bufChangesSize
-		, TRUE
-		, FILE_NOTIFY_CHANGE_FILE_NAME
-		, &bytesReturned
-		, &ovlReadDirectoryChanges
-		, NULL) == 0)
+	std::wstring tmpStr;
+	Stats stats;
+	RefreshCtx refreshCtx(dirToMonitor, hRefreshFinished);
+
+	for (;;)
 	{
-		err->set(L"ReadDirectoryChangesW(first call)");
-	}
-	else
-	{
-		std::wstring tmpStr;
-		Stats stats;
-		RefreshCtx refreshCtx(dirToMonitor, hRefreshFinished);
-		for (;;)
+		DWORD wait = WaitForMultipleObjects(3, waitHandles, FALSE, INFINITE);
+		if (wait == WAIT_FAILED)
 		{
-			DWORD wait = WaitForMultipleObjects(3, waitHandles, FALSE, INFINITE);
-			if (wait == WAIT_FAILED)
+			err->set(L"WaitForMultipleObjects");
+			break;
+		}
+		else if (wait == WAIT_IDX_ReadChanges)
+		{
+			if (!GetOverlappedResult(hDir, &ovlReadDirectoryChanges, &bytesReturned, TRUE))
 			{
-				err->set(L"WaitForMultipleObjects");
-				break;
+				printf("%d\tGetOverlappedResult\n", GetLastError());
 			}
-			else if (wait == WAIT_IDX_ReadChanges)
+			else if (bytesReturned == 0)
 			{
-				if (!GetOverlappedResult(hDir, &ovlReadDirectoryChanges, &bytesReturned, TRUE))
-				{
-					printf("%d\tGetOverlappedResult\n", GetLastError());
-				}
-				else
-				{
-					stats.overall_notify_bytes += bytesReturned;
-					processChanges(&refreshCtx, bufChanges, bytesReturned, &stats);
+				// this happens at the first time entering the loop.
+				// hEventReadChanges has an initial state of TRUE
+				// so we can save a "first call" to ReadDirectoryChangesW() on the outside of the loop
+			}
+			else
+			{
+				stats.overall_notify_bytes += bytesReturned;
+				processChanges(&refreshCtx, bufChanges, bytesReturned, &stats);
 
-					if (refreshCtx.printChangedFiles)
-					{
-						printChanges(bufChanges, bytesReturned, root_dir_for_print, &tmpStr);
-					}
-					
-					printStats(refreshCtx.printStats, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
-
-					if (ReadDirectoryChangesW(
-						hDir
-						, bufChanges
-						, bufChangesSize
-						, TRUE
-						, FILE_NOTIFY_CHANGE_FILE_NAME
-						, &bytesReturned
-						, &ovlReadDirectoryChanges
-						, NULL) == 0)
-					{
-						err->set(L"ReadDirectoryChangesW(in loop)");
-						break;
-					}
-				}
-			}
-			else if (wait == WAIT_IDX_stdin)
-			{
-				WCHAR key;
-				if (ReadConsoleKey(hStdin, &key))
+				if (refreshCtx.printChangedFiles)
 				{
-					if (key == L'r')
-					{
-						StartRefresh(&refreshCtx);
-					}
-					else if (key == L'f')
-					{
-						refreshCtx.printChangedFiles = !refreshCtx.printChangedFiles;
-						printf("printing changed files is now %s\n", refreshCtx.printChangedFiles ? "ON" : "OFF");
-					}
-					else if (key == L's')
-					{
-						refreshCtx.printStats = !refreshCtx.printStats;
-						printf("printing statistics is now %s\n", refreshCtx.printStats ? "ON" : "OFF");
-					}
-					else if (key == L'S')
-					{
-						printStats(true, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
-					}
+					printChanges(bufChanges, bytesReturned, root_dir_for_print, &tmpStr);
 				}
-			}
-			else if (wait == WAIT_IDX_refreshFinished)
-			{
+
 				printStats(refreshCtx.printStats, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
 			}
+
+			if (ReadDirectoryChangesW(
+				hDir
+				, bufChanges
+				, bufChangesSize
+				, TRUE
+				, FILE_NOTIFY_CHANGE_FILE_NAME
+				, &bytesReturned
+				, &ovlReadDirectoryChanges
+				, NULL) == 0)
+			{
+				err->set(L"ReadDirectoryChangesW");
+				break;
+			}
+		}
+		else if (wait == WAIT_IDX_stdin)
+		{
+			WCHAR key;
+			if (ReadConsoleKey(hStdin, &key))
+			{
+				if (key == L'r')
+				{
+					StartRefresh(&refreshCtx);
+				}
+				else if (key == L'f')
+				{
+					refreshCtx.printChangedFiles = !refreshCtx.printChangedFiles;
+					printf("printing changed files is now %s\n", refreshCtx.printChangedFiles ? "ON" : "OFF");
+				}
+				else if (key == L's')
+				{
+					refreshCtx.printStats = !refreshCtx.printStats;
+					printf("printing statistics is now %s\n", refreshCtx.printStats ? "ON" : "OFF");
+				}
+				else if (key == L'S')
+				{
+					printStats(true, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
+				}
+			}
+		}
+		else if (wait == WAIT_IDX_refreshFinished)
+		{
+			printStats(refreshCtx.printStats, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
 		}
 	}
 	return err;
@@ -269,7 +261,7 @@ int wmain(int argc, wchar_t *argv[])
 	{
 		err.set(L"CreateFileW", dirToMonitor);
 	}
-	else if ((hEventReadChanges = CreateEventW(NULL, FALSE, FALSE, NULL)) == NULL)
+	else if ((hEventReadChanges = CreateEventW(NULL, FALSE, TRUE, NULL)) == NULL)
 	{
 		err.set(L"CreateEventW", L"hEventReadChanges");
 	}
