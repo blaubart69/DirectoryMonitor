@@ -6,13 +6,8 @@
 
 void StartRefresh(RefreshCtx* refreshCtx);
 
-void printStats(bool shouldPrint, const Stats& stats, size_t fileCount, bool refreshRunning, size_t everyMilliseconds)
+void printStats(const Stats& stats, size_t fileCount, bool refreshRunning, size_t everyMilliseconds)
 {
-	if (!shouldPrint)
-	{
-		return;
-	}
-
 	static size_t last_added = 0;
 	static size_t last_removed = 0;
 	static size_t last_modified = 0;
@@ -168,14 +163,9 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 			else
 			{
 				stats.overall_notify_bytes += bytesReturned;
-				processChanges(&refreshCtx, bufChanges, bytesReturned, &stats);
-
-				if (refreshCtx.printChangedFiles)
-				{
-					printChanges(bufChanges, bytesReturned, root_dir_for_print, &tmpStr);
-				}
-
-				printStats(refreshCtx.printStats, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
+				                                    processChanges(&refreshCtx, bufChanges, bytesReturned, &stats);
+				if (refreshCtx.printChangedFiles) { printChanges  (bufChanges, bytesReturned, root_dir_for_print, &tmpStr);									    }
+				if (refreshCtx.printStats)        { printStats    (stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);  }
 			}
 
 			if (ReadDirectoryChangesW(
@@ -213,13 +203,16 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 				}
 				else if (key == L'S')
 				{
-					printStats(true, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
+					printStats(stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
 				}
 			}
 		}
 		else if (wait == WAIT_IDX_refreshFinished)
 		{
-			printStats(refreshCtx.printStats, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
+			if (refreshCtx.printStats)
+			{
+				printStats(stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
+			}
 		}
 	}
 	return err;

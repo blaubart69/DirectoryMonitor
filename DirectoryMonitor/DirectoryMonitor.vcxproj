@@ -189,6 +189,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectoryMonitor.h" />
+    <ClInclude Include="main.h" />
     <ClInclude Include="util.h" />
     <ClInclude Include="LastError.h" />
     <ClInclude Include="pch.h" />
