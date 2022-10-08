@@ -13,7 +13,7 @@ void printStats(const Stats& stats, size_t fileCount, bool refreshRunning, size_
 	static size_t last_modified = 0;
 	static size_t last_renamed = 0;
 
-	static size_t last_ticks = 0;
+	static ULONGLONG last_ticks = 0;
 
 	ULONGLONG currentTicks = GetTickCount64();
 	if ((currentTicks - last_ticks) < everyMilliseconds)
