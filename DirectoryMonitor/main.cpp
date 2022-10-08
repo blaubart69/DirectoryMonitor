@@ -247,11 +247,7 @@ int wmain(int argc, wchar_t *argv[])
 	LastError err;
 	Options opts;
 
-	if ((bufChanges = HeapAlloc(GetProcessHeap(), 0, bufChangesSize)) == NULL)
-	{
-		err.set(L"HeapAlloc", ERROR_NOT_ENOUGH_MEMORY);
-	}
-	else if ( (hDir=CreateFileW(
+	if ( (hDir=CreateFileW(
 		dirToMonitor
 		, FILE_LIST_DIRECTORY
 		, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
@@ -261,6 +257,10 @@ int wmain(int argc, wchar_t *argv[])
 		, NULL)) == INVALID_HANDLE_VALUE)
 	{
 		err.set(L"CreateFileW", dirToMonitor);
+	}
+	else if ((bufChanges = HeapAlloc(GetProcessHeap(), 0, bufChangesSize)) == NULL)
+	{
+		err.set(L"HeapAlloc", ERROR_NOT_ENOUGH_MEMORY);
 	}
 	else if ((hEventReadChanges = CreateEventW(NULL, FALSE, TRUE, NULL)) == NULL)
 	{
