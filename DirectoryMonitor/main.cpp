@@ -5,45 +5,7 @@
 #include "LastError.h"
 #include "util.h"
 
-std::wstring FormatByteSize(size_t qdw)
-{
-	std::wstring buf;
-	buf.resize(32);
-	if (StrFormatByteSizeW((LONGLONG)qdw, &buf[0], (UINT)buf.size()) == nullptr)
-	{
-		buf.assign(L"conversion failed (StrFormatByteSizeW)");
-	}
-	else
-	{
-		auto idxZero = buf.find_first_of(L'\0');
-		buf.resize(idxZero);
-	}
 
-	return buf;
-}
-void CloseHandle_mayBeNullOrInvalid(HANDLE h)
-{
-	if (h != NULL && h != INVALID_HANDLE_VALUE)
-	{
-		CloseHandle(h);
-	}
-}
-
-int localtime_as_str(WCHAR* buf, const size_t cchBuf)
-{
-	SYSTEMTIME systemTime, localTime;
-
-	GetSystemTime(&systemTime);
-	GetLocalTime (&localTime);
-
-	return 
-		swprintf_s(
-			buf
-			, cchBuf
-			, L"%04u-%02u-%02u %02u:%02u:%02u"
-			, localTime.wYear, localTime.wMonth, localTime.wDay
-			, localTime.wHour, localTime.wMinute, localTime.wSecond);
-}
 LPCWSTR getActionname(DWORD action)
 {
 	if (action == FILE_ACTION_ADDED)			return L"ADD    \t";
@@ -80,7 +42,9 @@ void printChanges(LPVOID buf, DWORD bytesReturned, const std::wstring& root_dir,
 		}
 	}
 
-	WriteStdout(*str);
+	//WriteStdout(*str);
+	//_putws(str->c_str());
+	wprintf(L"%s", str->c_str());
 }
 void printStats(bool shouldPrint, const Stats& stats, size_t fileCount, bool refreshRunning, size_t everyMilliseconds)
 {
@@ -130,6 +94,7 @@ void changes_updateStats(DWORD action, Stats* stats)
 	else if (action == FILE_ACTION_RENAMED_NEW_NAME)	{ stats->renamed  += 1;	}
 }
 
+/*
 void handleRunningEnumeration(std::unordered_set<std::wstring>* files, const FILE_NOTIFY_INFORMATION* info)
 {
 	if (info->Action == FILE_ACTION_ADDED)
@@ -149,6 +114,21 @@ void handleRunningEnumeration(std::unordered_set<std::wstring>* files, const FIL
 #endif
 
 	}
+}*/
+
+void handleRunningEnumeration(std::unordered_set<std::wstring>* files, DWORD action, std::wstring_view filename)
+{
+	if (action == FILE_ACTION_ADDED)
+	{
+		//files->emplace(&(info->FileName[0]), info->FileNameLength);
+		files->emplace(filename);
+	}
+	else if (action == FILE_ACTION_REMOVED)
+	{
+		std::wstring tmpFilename( filename.data(), filename.length() );
+		//files->erase(tmpFilename);
+		files->erase(tmpFilename);
+	}
 }
 
 void processChanges(RefreshCtx* ctx, LPVOID buf, DWORD bytesReturned, Stats *stats)
@@ -160,6 +140,23 @@ void processChanges(RefreshCtx* ctx, LPVOID buf, DWORD bytesReturned, Stats *sta
 		const std::lock_guard<std::mutex> lock_hashtable(ctx->mutex_notify_vs_enum);
 		std::unordered_set<std::wstring>* set_of_files = ctx->files.load();
 
+		walk_FILE_NOTIFY_INFORMATION(buf, bytesReturned,
+			[&](DWORD action, std::wstring_view filename)
+			{
+				changes += 1;
+				changes_updateStats(action, stats);
+				if (set_of_files == nullptr)
+				{
+					if      (action == FILE_ACTION_ADDED)   { ctx->numberFilesIncrement(); }
+					else if (action == FILE_ACTION_REMOVED) { ctx->numberFilesDecrement(); }
+				}
+				else
+				{
+					handleRunningEnumeration(set_of_files, action, filename);
+				}
+			});
+
+		/*
 		for (;;)
 		{
 			changes += 1;
@@ -183,33 +180,12 @@ void processChanges(RefreshCtx* ctx, LPVOID buf, DWORD bytesReturned, Stats *sta
 				info = (FILE_NOTIFY_INFORMATION*)((BYTE*)info + info->NextEntryOffset);
 			}
 		}
+		*/
 	}
 	stats->changes += 1;
-	stats->largest_change_files = max(changes, stats->largest_change_files);
-	stats->largest_change_bytes = max((size_t)bytesReturned, stats->largest_change_bytes);
+	stats->largest_change_files = std::max<size_t>(changes, stats->largest_change_files);
+	stats->largest_change_bytes = std::max<size_t>((size_t)bytesReturned, stats->largest_change_bytes);
 }
-
-bool ProcessConsoleInput(HANDLE hStdin, char* key)
-{
-	INPUT_RECORD record;
-	DWORD numRead;
-
-	if (!ReadConsoleInputW(hStdin, &record, 1, &numRead)) {
-	}
-	else if (record.EventType != KEY_EVENT) {
-		// don't care about other console events
-	}
-	else if (!record.Event.KeyEvent.bKeyDown) {
-		// really only care about keydown
-	}
-	else
-	{
-		*key = record.Event.KeyEvent.uChar.AsciiChar;
-		return true;
-	}
-
-	return false;
-} 
 
 LastError* runEnumeration_hashTable(RefreshCtx* ctx, LastError* err)
 {
@@ -331,7 +307,6 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 	}
 	else
 	{
-		wprintf(L"start monitoring directory: %s\n", dirToMonitor);
 		std::wstring tmpStr;
 		RefreshCtx refreshCtx(dirToMonitor, hRefreshFinished);
 		for (;;)
@@ -376,24 +351,24 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 			}
 			else if (wait == WAIT_IDX_stdin)
 			{
-				char key;
-				if (ProcessConsoleInput(hStdin, &key))
+				WCHAR key;
+				if (ReadConsoleKey(hStdin, &key))
 				{
-					if (key == 'r')
+					if (key == L'r')
 					{
 						StartRefresh(&refreshCtx);
 					}
-					else if (key == 'f')
+					else if (key == L'f')
 					{
 						refreshCtx.printChangedFiles = !refreshCtx.printChangedFiles;
 						printf("printing changed files is now %s\n", refreshCtx.printChangedFiles ? "ON" : "OFF");
 					}
-					else if (key == 's')
+					else if (key == L's')
 					{
 						refreshCtx.printStats = !refreshCtx.printStats;
 						printf("printing statistics is now %s\n", refreshCtx.printStats ? "ON" : "OFF");
 					}
-					else if (key == 'S')
+					else if (key == L'S')
 					{
 						printStats(true, stats, refreshCtx.getFileCount(), refreshCtx.refreshRunning(), opts.printStatsEveryMillis);
 					}
