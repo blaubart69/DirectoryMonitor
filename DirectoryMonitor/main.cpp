@@ -6,45 +6,6 @@
 
 void StartRefresh(RefreshCtx* refreshCtx);
 
-LPCWSTR getActionname(DWORD action)
-{
-	if (action == FILE_ACTION_ADDED)			return L"ADD    \t";
-	if (action == FILE_ACTION_REMOVED)			return L"DEL    \t";
-	if (action == FILE_ACTION_MODIFIED)			return L"MOD    \t";
-	if (action == FILE_ACTION_RENAMED_OLD_NAME) return L"REN_OLD\t";
-	if (action == FILE_ACTION_RENAMED_NEW_NAME) return L"REN_NEW\t";
-	                                            return L"UNKNOWN\t";
-}
-void printChanges(LPVOID buf, DWORD bytesReturned, const std::wstring& root_dir, std::wstring* str)
-{
-	const FILE_NOTIFY_INFORMATION* info = (FILE_NOTIFY_INFORMATION*)buf;
-	WCHAR localtime_string[20];
-	localtime_as_str(localtime_string, sizeof(localtime_string) / sizeof(WCHAR));
-
-	str->clear();
-	for(;;)
-	{
-		str->append(localtime_string);
-		str->push_back(L'\t');
-		str->append(getActionname(info->Action));
-		str->append(root_dir);
-		str->append(info->FileName, info->FileNameLength / sizeof(WCHAR) );
-		str->push_back(L'\r');
-		str->push_back(L'\n');
-
-		if (info->NextEntryOffset == 0)
-		{
-			break;
-		}
-		else
-		{
-			info = (FILE_NOTIFY_INFORMATION*)((BYTE*)info + info->NextEntryOffset);
-		}
-	}
-	//WriteStdout(*str);
-	//_putws(str->c_str());
-	wprintf(L"%s", str->c_str());
-}
 void printStats(bool shouldPrint, const Stats& stats, size_t fileCount, bool refreshRunning, size_t everyMilliseconds)
 {
 	if (!shouldPrint)
@@ -52,10 +13,10 @@ void printStats(bool shouldPrint, const Stats& stats, size_t fileCount, bool ref
 		return;
 	}
 
-	static size_t last_added	= 0;
-	static size_t last_removed	= 0;
-	static size_t last_modified	= 0;
-	static size_t last_renamed  = 0;
+	static size_t last_added = 0;
+	static size_t last_removed = 0;
+	static size_t last_modified = 0;
+	static size_t last_renamed = 0;
 
 	static size_t last_ticks = 0;
 
@@ -68,26 +29,56 @@ void printStats(bool shouldPrint, const Stats& stats, size_t fileCount, bool ref
 	wprintf(L"files%s: %zu | +/-/mod/ren: %zu(%zu)/%zu(%zu)/%zu(%zu)/%zu(%zu) | notify records/bytes: %zu/%s | max files/bytes: %zu/%s\n"
 		, refreshRunning ? L"(refresh running)" : L""
 		, fileCount
-		, stats.added,		(stats.added    - last_added)
-		, stats.removed,    (stats.removed  - last_removed)
-		, stats.modified,	(stats.modified - last_modified)
-		, stats.renamed,	(stats.renamed  - last_renamed)
-		,                stats.changes
+		, stats.added, (stats.added - last_added)
+		, stats.removed, (stats.removed - last_removed)
+		, stats.modified, (stats.modified - last_modified)
+		, stats.renamed, (stats.renamed - last_renamed)
+		, stats.changes
 		, FormatByteSize(stats.overall_notify_bytes).c_str()
-		,               stats.largest_change_files
+		, stats.largest_change_files
 		, FormatByteSize(stats.largest_change_bytes).c_str()
 	);
 
-	last_added    = stats.added;
-	last_removed  = stats.removed;
+	last_added = stats.added;
+	last_removed = stats.removed;
 	last_modified = stats.modified;
-	last_renamed  = stats.renamed;
-	last_ticks    = currentTicks;
+	last_renamed = stats.renamed;
+	last_ticks = currentTicks;
+}
+
+LPCWSTR getActionname(DWORD action)
+{
+	if (action == FILE_ACTION_ADDED)			return L"ADD    \t";
+	if (action == FILE_ACTION_REMOVED)			return L"DEL    \t";
+	if (action == FILE_ACTION_MODIFIED)			return L"MOD    \t";
+	if (action == FILE_ACTION_RENAMED_OLD_NAME) return L"REN_OLD\t";
+	if (action == FILE_ACTION_RENAMED_NEW_NAME) return L"REN_NEW\t";
+	                                            return L"UNKNOWN\t";
+}
+void printChanges(LPVOID buf, DWORD bytesReturned, const std::wstring& root_dir, std::wstring* str)
+{
+	WCHAR localtime_string[20];
+	localtime_as_str(localtime_string, sizeof(localtime_string) / sizeof(WCHAR));
+
+	str->clear();
+
+	walk_FILE_NOTIFY_INFORMATION(buf, bytesReturned,
+		[&](DWORD action, std::wstring_view filename)
+		{
+			str->append(localtime_string);
+			str->push_back(L'\t');
+			str->append(getActionname(action));
+			str->append(root_dir);
+			str->append(filename);
+			str->push_back(L'\r');
+			str->push_back(L'\n');
+		});
+
+	wprintf(L"%s", str->c_str());
 }
 
 void processChanges(RefreshCtx* ctx, LPVOID buf, DWORD bytesReturned, Stats *stats)
 {
-	const FILE_NOTIFY_INFORMATION* info = (FILE_NOTIFY_INFORMATION*)buf;
 	size_t changes = 0;
 
 	{
