@@ -148,9 +148,10 @@
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
       <StringPooling>true</StringPooling>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <Optimization>MaxSpeed</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -185,7 +186,6 @@
     <ClCompile Include="refresh.cpp" />
     <ClCompile Include="TrySetPrivilege.cpp" />
     <ClCompile Include="util.cpp" />
-    <ClCompile Include="WriteStdout.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DirectoryMonitor.h" />
@@ -193,7 +193,6 @@
     <ClInclude Include="util.h" />
     <ClInclude Include="LastError.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="WriteStdout.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

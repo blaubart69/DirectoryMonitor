@@ -27,9 +27,6 @@
     <ClCompile Include="TrySetPrivilege.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="WriteStdout.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="util.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -48,9 +45,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="DirectoryMonitor.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="WriteStdout.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="main.h">
