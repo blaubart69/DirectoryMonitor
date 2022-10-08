@@ -156,7 +156,8 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 		{
 			if (!GetOverlappedResult(hDir, &ovlReadDirectoryChanges, &bytesReturned, TRUE))
 			{
-				printf("%d\tGetOverlappedResult\n", GetLastError());
+				err->set(L"GetOverlappedResult");
+				break;
 			}
 			else if (bytesReturned == 0)
 			{
