@@ -8,10 +8,9 @@ private:
 	HANDLE _hEventRefreshFinished;
 
 public:
-	const std::wstring rootDir;
-	
-	std::mutex mutex_notify_vs_enum;
-	std::atomic<std::unordered_set<std::wstring>*> files;
+	const std::wstring								rootDir;
+	std::mutex										mutex_notify_vs_enum;
+	std::atomic<std::unordered_set<std::wstring>*>	files;
 
 	bool printChangedFiles = true;
 	bool printStats = false;
@@ -35,29 +34,41 @@ public:
 		}
 	}
 
-	void    setFileCount(size_t value) { _fileCounter.store(value); }
-	size_t	getFileCount() const { return _fileCounter.load(); }
-	void numberFilesIncrement() { _fileCounter++; }
+	void setFileCount(size_t value) 
+	{ 
+		_fileCounter.store(value); 
+	}
+
+	size_t getFileCount() const 
+	{ 
+		return _fileCounter.load(); 
+	}
+
+	void numberFilesIncrement() 
+	{ 
+		_fileCounter++; 
+	}
+
 	void numberFilesDecrement()
 	{
 		size_t value = _fileCounter.load();
-		if (value == 0)
-		{
-			return;
-		}
-
+		
 		for (;;)
 		{
-			size_t newValue = value - 1;
+			if (value == 0)
+			{
+				break;
+			}
+
 			if (_fileCounter.compare_exchange_weak(
-				value		    // expected
-				, newValue))	// desired
+				  value		    // expected
+				, value - 1 ))	// desired
 			{
 				break;
 			}
 			else
 			{
-				value = _fileCounter.load();
+				// value has new _fileCounter loaded
 			}
 		}
 	}
