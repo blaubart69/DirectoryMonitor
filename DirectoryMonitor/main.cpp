@@ -222,6 +222,7 @@ bool getOpts(int argc, wchar_t* argv[], Options* opts)
 	{
 		opts->dirToMonitor = argv[1];
 		opts->dwNotifyFilter = FILE_NOTIFY_CHANGE_FILE_NAME;
+		return true;
 	}
 	else if (argc == 3)
 	{
@@ -230,15 +231,14 @@ bool getOpts(int argc, wchar_t* argv[], Options* opts)
 		if (rc == EOF || rc == 0)
 		{
 			fwprintf(stderr, L"E could not convert your hex value: %s\n", argv[1]);
-			return false;
+		}
+		else
+		{
+			return true;
 		}
 	}
-	else
-	{
-		return false;
-	}
 
-	return true;
+	return false;
 }	
 
 int wmain(int argc, wchar_t *argv[])
@@ -249,7 +249,7 @@ int wmain(int argc, wchar_t *argv[])
 	{
 		wprintf(L"usage: %s [NOTIFY_FILTER] {directory to monitor}"
 				L"\n  NOTIFY_FILTER (hex):"
-   			    L"\n    FILE_NOTIFY_CHANGE_FILE_NAME    0x00000001"   
+   				L"\n    FILE_NOTIFY_CHANGE_FILE_NAME    0x00000001"   
     			L"\n    FILE_NOTIFY_CHANGE_DIR_NAME     0x00000002"   
     			L"\n    FILE_NOTIFY_CHANGE_ATTRIBUTES   0x00000004"   
     			L"\n    FILE_NOTIFY_CHANGE_SIZE         0x00000008"   
@@ -257,7 +257,7 @@ int wmain(int argc, wchar_t *argv[])
     			L"\n    FILE_NOTIFY_CHANGE_LAST_ACCESS  0x00000020"   
     			L"\n    FILE_NOTIFY_CHANGE_CREATION     0x00000040"   
     			L"\n    FILE_NOTIFY_CHANGE_SECURITY     0x00000100"   
-			    L""
+				L""
 			, argv[0]);
 		return 999;
 	}
