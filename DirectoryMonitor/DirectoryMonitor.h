@@ -74,11 +74,9 @@ public:
 	}
 };
 
-class Stats
+struct Changes
 {
 public:
-	size_t	changes = 0;
-
 	size_t	added = 0;
 	size_t	removed = 0;
 	size_t	modified = 0;
@@ -87,6 +85,11 @@ public:
 	size_t  largest_change_bytes = 0;
 	size_t  largest_change_files = 0;
 	size_t  overall_notify_bytes = 0;
+
+	size_t  Countchanges() const
+	{
+		return added + removed + modified + renamed;
+	}
 };
 
 class Options
