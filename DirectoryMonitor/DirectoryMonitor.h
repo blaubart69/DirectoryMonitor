@@ -86,7 +86,7 @@ public:
 	size_t  largest_change_files = 0;
 	size_t  overall_notify_bytes = 0;
 
-	size_t  Countchanges() const
+	size_t  Notifications() const
 	{
 		return added + removed + modified + renamed;
 	}

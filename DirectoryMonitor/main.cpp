@@ -28,7 +28,7 @@ void printStats(const Changes& stats, size_t fileCount, bool refreshRunning, siz
 		, stats.removed, (stats.removed - last_removed)
 		, stats.modified, (stats.modified - last_modified)
 		, stats.renamed, (stats.renamed - last_renamed)
-		, stats.Countchanges()
+		, stats.Notifications()
 		, FormatByteSize(stats.overall_notify_bytes).c_str()
 		, stats.largest_change_files
 		, FormatByteSize(stats.largest_change_bytes).c_str()
