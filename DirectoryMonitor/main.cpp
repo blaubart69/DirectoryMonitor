@@ -171,7 +171,7 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 				, bufChanges
 				, bufChangesSize
 				, TRUE
-				, FILE_NOTIFY_CHANGE_FILE_NAME
+				, opts.dwNotifyFilter
 				, &bytesReturned
 				, &ovlReadDirectoryChanges
 				, NULL) == 0)
@@ -216,11 +216,49 @@ LastError* StartMonitor(LPCWSTR dirToMonitor, const HANDLE hDir, const HANDLE hE
 	return err;
 }
 
+bool getOpts(int argc, wchar_t* argv[], Options* opts)
+{
+	if (argc == 2) 
+	{
+		opts->dirToMonitor = argv[1];
+		opts->dwNotifyFilter = FILE_NOTIFY_CHANGE_FILE_NAME;
+	}
+	else if (argc == 3)
+	{
+		opts->dirToMonitor = argv[2];
+		int rc = swscanf_s(argv[1], L"%x", &opts->dwNotifyFilter);
+		if (rc == EOF || rc == 0)
+		{
+			fwprintf(stderr, L"E could not convert your hex value: %s\n", argv[1]);
+			return false;
+		}
+	}
+	else
+	{
+		return false;
+	}
+
+	return true;
+}	
+
 int wmain(int argc, wchar_t *argv[])
 {
-	if (argc != 2)
+	Options opts;
+
+	if (!getOpts(argc,argv, &opts))
 	{
-		wprintf(L"usage: %s {directory to monitor}", argv[0]);
+		wprintf(L"usage: %s [NOTIFY_FILTER] {directory to monitor}"
+				L"\n  NOTIFY_FILTER (hex):"
+   			    L"\n    FILE_NOTIFY_CHANGE_FILE_NAME    0x00000001"   
+    			L"\n    FILE_NOTIFY_CHANGE_DIR_NAME     0x00000002"   
+    			L"\n    FILE_NOTIFY_CHANGE_ATTRIBUTES   0x00000004"   
+    			L"\n    FILE_NOTIFY_CHANGE_SIZE         0x00000008"   
+    			L"\n    FILE_NOTIFY_CHANGE_LAST_WRITE   0x00000010"   
+    			L"\n    FILE_NOTIFY_CHANGE_LAST_ACCESS  0x00000020"   
+    			L"\n    FILE_NOTIFY_CHANGE_CREATION     0x00000040"   
+    			L"\n    FILE_NOTIFY_CHANGE_SECURITY     0x00000100"   
+			    L""
+			, argv[0]);
 		return 999;
 	}
 
@@ -229,17 +267,15 @@ int wmain(int argc, wchar_t *argv[])
 		fwprintf(stderr, L"W could not set privilege SE_BACKUP_NAME\n");
 	}
 
-	LPCWSTR dirToMonitor = argv[1];
 	LPVOID bufChanges = NULL;
 	const DWORD bufChangesSize = 64 * 1024;
 	HANDLE hDir = NULL;
 	HANDLE hEventReadChanges = NULL;
 	HANDLE hRefreshFinished = NULL;
 	LastError err;
-	Options opts;
 
 	if ( (hDir=CreateFileW(
-		dirToMonitor
+		opts.dirToMonitor
 		, FILE_LIST_DIRECTORY
 		, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
 		, NULL
@@ -247,7 +283,7 @@ int wmain(int argc, wchar_t *argv[])
 		, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED
 		, NULL)) == INVALID_HANDLE_VALUE)
 	{
-		err.set(L"CreateFileW", dirToMonitor);
+		err.set(L"CreateFileW", opts.dirToMonitor);
 	}
 	else if ((bufChanges = HeapAlloc(GetProcessHeap(), 0, bufChangesSize)) == NULL)
 	{
@@ -263,7 +299,7 @@ int wmain(int argc, wchar_t *argv[])
 	}
 	else
 	{
-		StartMonitor(dirToMonitor, hDir, hEventReadChanges, hRefreshFinished, bufChanges, bufChangesSize, opts, &err);
+		StartMonitor(opts.dirToMonitor, hDir, hEventReadChanges, hRefreshFinished, bufChanges, bufChangesSize, opts, &err);
 	}
 
 	CloseHandle_mayBeNullOrInvalid(hEventReadChanges);

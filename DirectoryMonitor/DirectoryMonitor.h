@@ -92,9 +92,10 @@ public:
 	}
 };
 
-class Options
+struct Options
 {
-public:
 	size_t	printStatsEveryMillis = 1000;
+	LPCWSTR dirToMonitor = nullptr;
+	DWORD dwNotifyFilter;
 };
 
