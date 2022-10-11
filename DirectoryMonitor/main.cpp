@@ -21,6 +21,9 @@ void printStats(const Changes& stats, size_t fileCount, bool refreshRunning, siz
 		return;
 	}
 
+	WCHAR humanSize1[32];
+	WCHAR humanSize2[32];
+
 	wprintf(L"files%s: %zu | +/-/mod/ren: %zu(%zu)/%zu(%zu)/%zu(%zu)/%zu(%zu) | notify records/bytes: %zu/%s | max files/bytes: %zu/%s\n"
 		, refreshRunning ? L"(refresh running)" : L""
 		, fileCount
@@ -29,9 +32,10 @@ void printStats(const Changes& stats, size_t fileCount, bool refreshRunning, siz
 		, stats.modified, (stats.modified - last_modified)
 		, stats.renamed, (stats.renamed - last_renamed)
 		, stats.Notifications()
-		, FormatByteSize(stats.overall_notify_bytes).c_str()
+		, StrFormatByteSizeW( (LONGLONG)stats.overall_notify_bytes, humanSize1, sizeof(humanSize1) / sizeof(WCHAR) )
 		, stats.largest_change_files
-		, FormatByteSize(stats.largest_change_bytes).c_str()
+		, StrFormatByteSizeW((LONGLONG)stats.largest_change_bytes,  humanSize2, sizeof(humanSize2) / sizeof(WCHAR) )
+
 	);
 
 	last_added = stats.added;

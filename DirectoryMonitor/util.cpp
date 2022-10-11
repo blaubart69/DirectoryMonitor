@@ -36,22 +36,6 @@ void walk_FILE_NOTIFY_INFORMATION(void* buf, size_t length, std::function<void(D
 	);
 }
 
-std::wstring FormatByteSize(size_t qdw)
-{
-	std::wstring buf;
-	buf.resize(32);
-	if (StrFormatByteSizeW((LONGLONG)qdw, &buf[0], (UINT)buf.size()) == nullptr)
-	{
-		buf.assign(L"conversion failed (StrFormatByteSizeW)");
-	}
-	else
-	{
-		auto idxZero = buf.find_first_of(L'\0');
-		buf.resize(idxZero);
-	}
-
-	return buf;
-}
 void CloseHandle_mayBeNullOrInvalid(HANDLE h)
 {
 	if (h != NULL && h != INVALID_HANDLE_VALUE)
