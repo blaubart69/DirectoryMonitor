@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include <array>
+
 #include "DirectoryMonitor.h"
 #include "LastError.h"
 #include "util.h"
@@ -21,8 +23,8 @@ void printStats(const Changes& stats, size_t fileCount, bool refreshRunning, siz
 		return;
 	}
 
-	WCHAR humanSize1[32];
-	WCHAR humanSize2[32];
+	std::array<WCHAR, 32> humanSize3;
+	std::array<WCHAR, 32> humanSize4;
 
 	wprintf(L"files%s: %zu | +/-/mod/ren: %zu(%zu)/%zu(%zu)/%zu(%zu)/%zu(%zu) | notify records/bytes: %zu/%s | max files/bytes: %zu/%s\n"
 		, refreshRunning ? L"(refresh running)" : L""
@@ -32,9 +34,9 @@ void printStats(const Changes& stats, size_t fileCount, bool refreshRunning, siz
 		, stats.modified, (stats.modified - last_modified)
 		, stats.renamed, (stats.renamed - last_renamed)
 		, stats.Notifications()
-		, StrFormatByteSizeW( (LONGLONG)stats.overall_notify_bytes, humanSize1, sizeof(humanSize1) / sizeof(WCHAR) )
+		, StrFormatByteSizeW((LONGLONG)stats.overall_notify_bytes, &humanSize3[0], humanSize3.size())
 		, stats.largest_change_files
-		, StrFormatByteSizeW((LONGLONG)stats.largest_change_bytes,  humanSize2, sizeof(humanSize2) / sizeof(WCHAR) )
+		, StrFormatByteSizeW((LONGLONG)stats.largest_change_bytes, &humanSize4[0], humanSize4.size())
 
 	);
 
