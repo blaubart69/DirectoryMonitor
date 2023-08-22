@@ -71,7 +71,6 @@ void printChanges(LPVOID buf, DWORD bytesReturned, const std::wstring& root_dir,
 			str->append(getActionname(action));
 			str->append(root_dir);
 			str->append(filename);
-			str->push_back(L'\r');
 			str->push_back(L'\n');
 		});
 
